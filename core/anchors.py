@@ -13,9 +13,9 @@ def generate_default_anchor_maps(anchors_setting=None, input_shape=INPUT_SIZE):
     generate default anchor
 
     :param anchors_setting: all informations of anchors
-    :param input_shape: shape of input images, e.g. (h, w)
-    :return: center_anchors: # anchors * 4 (oy, ox, h, w)
-             edge_anchors: # anchors * 4 (y0, x0, y1, x1)
+    :param input_shape: shape of input images, e.g. (w, h)
+    :return: center_anchors: # anchors * 4 (ox, oy, w, h)  bbox = [x-left, y-top, width, height]
+             edge_anchors: # anchors * 4 (x0, y0, x1, y1)
              anchor_area: # anchors * 1 (area)
     """
     if anchors_setting is None:
@@ -24,7 +24,7 @@ def generate_default_anchor_maps(anchors_setting=None, input_shape=INPUT_SIZE):
     center_anchors = np.zeros((0, 4), dtype=np.float32)
     edge_anchors = np.zeros((0, 4), dtype=np.float32)
     anchor_areas = np.zeros((0,), dtype=np.float32)
-    input_shape = np.array(input_shape, dtype=int)
+    input_shape = np.array(input_shape, dtype=np.float32)
 
     for anchor_info in anchors_setting:
 
@@ -33,9 +33,9 @@ def generate_default_anchor_maps(anchors_setting=None, input_shape=INPUT_SIZE):
         scales = anchor_info['scale']
         aspect_ratios = anchor_info['aspect_ratio']
 
-        output_map_shape = np.ceil(input_shape.astype(np.float32) / stride)
+        output_map_shape = np.ceil(input_shape / stride)
         output_map_shape = output_map_shape.astype(np.int)
-        output_shape = tuple(output_map_shape) + (4,)
+        output_shape = tuple(output_map_shape) + (4,)  # (y（高度）方向格数, x（宽度）方向格数, 4)
         ostart = stride / 2.
         oy = np.arange(ostart, ostart + stride * output_shape[0], stride)
         oy = oy.reshape(output_shape[0], 1)
@@ -44,10 +44,11 @@ def generate_default_anchor_maps(anchors_setting=None, input_shape=INPUT_SIZE):
         center_anchor_map_template = np.zeros(output_shape, dtype=np.float32)
         center_anchor_map_template[:, :, 0] = oy
         center_anchor_map_template[:, :, 1] = ox
-        for scale in scales:
-            for aspect_ratio in aspect_ratios:
+        for scale in scales:  # 控制放大倍数
+            for aspect_ratio in aspect_ratios:  # 控制矩形形状
+                # 一条anchor设定，对应2（3）个放大倍数，每个放大倍数又对应三种矩形形状
                 center_anchor_map = center_anchor_map_template.copy()
-                center_anchor_map[:, :, 2] = size * scale / float(aspect_ratio) ** 0.5
+                center_anchor_map[:, :, 2] = size * scale / float(aspect_ratio) ** 0.5  # 一除一乘形成矩形
                 center_anchor_map[:, :, 3] = size * scale * float(aspect_ratio) ** 0.5
 
                 edge_anchor_map = np.concatenate((center_anchor_map[..., :2] - center_anchor_map[..., 2:4] / 2.,
@@ -62,31 +63,38 @@ def generate_default_anchor_maps(anchors_setting=None, input_shape=INPUT_SIZE):
 
 
 def hard_nms(cdds, topn=10, iou_thresh=0.25):
+    """
+    为什么要选出界内面积占比小的切片？
+    :param cdds: 规模为(N, 5+)，是什么呢？
+    :param topn:
+    :param iou_thresh: ?一个比率，筛选掉cdds中的某些行（每一行应该是一个edge_anchors，只不多第0个元素是这张举矩形截图的“索引”）
+    :return:
+    """
     if not (type(cdds).__module__ == 'numpy' and len(cdds.shape) == 2 and cdds.shape[1] >= 5):
         raise TypeError('edge_box_map should be N * 5+ ndarray')
 
     cdds = cdds.copy()
-    indices = np.argsort(cdds[:, 0])
-    cdds = cdds[indices]
+    indices = np.argsort(cdds[:, 0])  # indices => 一维(N, )
+    cdds = cdds[indices]  # 按第一列（可能是索引）重排序，仍为2维
     cdd_results = []
 
     res = cdds
 
     while res.any():
-        cdd = res[-1]
+        cdd = res[-1]  # 等于 res[-1, :]，cdd取最后一行，直接加入结果cdd_results
         cdd_results.append(cdd)
         if len(cdd_results) == topn:
             return np.array(cdd_results)
-        res = res[:-1]
+        res = res[:-1]  # 第一次修改res
 
-        start_max = np.maximum(res[:, 1:3], cdd[1:3])
-        end_min = np.minimum(res[:, 3:5], cdd[3:5])
-        lengths = end_min - start_max
-        intersec_map = lengths[:, 0] * lengths[:, 1]
-        intersec_map[np.logical_or(lengths[:, 0] < 0, lengths[:, 1] < 0)] = 0
+        start_max = np.maximum(res[:, 1:3], cdd[1:3])  # 起点像素（宽、高），选择最靠后的
+        end_min = np.minimum(res[:, 3:5], cdd[3:5])  # 终点像素（宽、高），选择最靠前的
+        lengths = end_min - start_max  # N行2列：界内宽、高
+        intersec_map = lengths[:, 0] * lengths[:, 1]  # N行：每个图片的界内面积
+        intersec_map[np.logical_or(lengths[:, 0] < 0, lengths[:, 1] < 0)] = 0  # 区域为负者，变成0
         iou_map_cur = intersec_map / ((res[:, 3] - res[:, 1]) * (res[:, 4] - res[:, 2]) + (cdd[3] - cdd[1]) * (
-            cdd[4] - cdd[2]) - intersec_map)
-        res = res[iou_map_cur < iou_thresh]
+            cdd[4] - cdd[2]) - intersec_map)  # 求一个比例矩阵：每张图片的最小界的面积/图片的总界面积
+        res = res[iou_map_cur < iou_thresh]  # 第二次修改res
 
     return np.array(cdd_results)
 

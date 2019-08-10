@@ -108,10 +108,10 @@ class ResNet(nn.Module):
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         for m in self.modules():
-            if isinstance(m, nn.Conv2d):
+            if isinstance(m, nn.Conv2d):  # 初始化卷积层的方式
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, nn.BatchNorm2d):
+            elif isinstance(m, nn.BatchNorm2d):  # BatchNorm层的参数初始化也应该能够更加优化
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
@@ -149,7 +149,7 @@ class ResNet(nn.Module):
         feature2 = x
         x = self.fc(x)
 
-        return x, feature1, feature2
+        return x, feature1, feature2  # feature1和feature2是一样的啊，都是x，应该用copy_吧？
 
 
 def resnet18(pretrained=False, **kwargs):
@@ -185,6 +185,8 @@ def resnet50(pretrained=False, **kwargs):
     model = ResNet(Bottleneck, [3, 4, 6, 3], **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet50']))
+        # model.load_state_dict(torch.load(resnet50_pth))
+        # model = models.resnet50(pretrained=True)
     return model
 
 

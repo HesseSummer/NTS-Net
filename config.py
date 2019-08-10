@@ -1,10 +1,13 @@
 BATCH_SIZE = 16
 PROPOSAL_NUM = 6
-CAT_NUM = 4
+CAT_NUM = 4  # 最后参与concat的图片数量
 INPUT_SIZE = (448, 448)  # (w, h)
 LR = 0.001
 WD = 1e-4
+end_epoch = 500
 SAVE_FREQ = 1
 resume = ''
 test_model = 'model.ckpt'
-save_dir = '/data_4t/yangz/models/'
+save_dir = './save/'
+img_dir = '/home/hessesummer/Caltec-UCSDbirds-200-2011/CUB_200_2011/'
+resnet50_pth = './resnet50.pth'

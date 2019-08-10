@@ -1,5 +1,5 @@
 import numpy as np
-import scipy.misc
+import cv2
 import os
 from PIL import Image
 from torchvision import transforms
@@ -15,21 +15,21 @@ class CUB():
         train_val_file = open(os.path.join(self.root, 'train_test_split.txt'))
         img_name_list = []
         for line in img_txt_file:
-            img_name_list.append(line[:-1].split(' ')[-1])
+            img_name_list.append(line[:-1].split(' ')[-1])  # line[:-1]把\n给去掉
         label_list = []
         for line in label_txt_file:
-            label_list.append(int(line[:-1].split(' ')[-1]) - 1)
+            label_list.append(int(line[:-1].split(' ')[-1]) - 1)  # 第一类对应-索引0
         train_test_list = []
         for line in train_val_file:
             train_test_list.append(int(line[:-1].split(' ')[-1]))
-        train_file_list = [x for i, x in zip(train_test_list, img_name_list) if i]
+        train_file_list = [x for i, x in zip(train_test_list, img_name_list) if i]  # 标记为1的是训练集
         test_file_list = [x for i, x in zip(train_test_list, img_name_list) if not i]
         if self.is_train:
-            self.train_img = [scipy.misc.imread(os.path.join(self.root, 'images', train_file)) for train_file in
-                              train_file_list[:data_len]]
+            self.train_img = [cv2.imread(os.path.join(self.root, 'images', train_file)) for train_file in
+                              train_file_list[:data_len]]  # scipy.misc.imread返回的是numpy.ndarray类型
             self.train_label = [x for i, x in zip(train_test_list, label_list) if i][:data_len]
         if not self.is_train:
-            self.test_img = [scipy.misc.imread(os.path.join(self.root, 'images', test_file)) for test_file in
+            self.test_img = [cv2.imread(os.path.join(self.root, 'images', test_file)) for test_file in
                              test_file_list[:data_len]]
             self.test_label = [x for i, x in zip(train_test_list, label_list) if not i][:data_len]
 
@@ -53,7 +53,7 @@ class CUB():
             img = transforms.Resize((600, 600), Image.BILINEAR)(img)
             img = transforms.CenterCrop(INPUT_SIZE)(img)
             img = transforms.ToTensor()(img)
-            img = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(img)
+            img = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(img)  # 为什么使用这组参数Normalize
 
         return img, target
 

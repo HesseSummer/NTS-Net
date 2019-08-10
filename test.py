@@ -1,5 +1,4 @@
 import os
-from torch.autograd import Variable
 import torch.utils.data
 from torch.nn import DataParallel
 from config import BATCH_SIZE, PROPOSAL_NUM, test_model
@@ -40,7 +39,7 @@ for i, data in enumerate(trainloader):
         # calculate accuracy
         _, concat_predict = torch.max(concat_logits, 1)
         total += batch_size
-        train_correct += torch.sum(concat_predict.data == label.data)
+        train_correct += torch.sum(concat_predict == label)
         train_loss += concat_loss.item() * batch_size
         progress_bar(i, len(trainloader), 'eval on train set')
 
